@@ -38,7 +38,7 @@ def lambda_handler(event, context):
 
 def smart_news(driver):
     MEDIA = "sn"
-    CAMPAIGN_ID = "19517007"
+    CAMPAIGN_IDS = [19517007, 12993177]
     COLUMNS = {
         'NAME':0,
         'DAILY_BUDGET':7,
@@ -52,7 +52,7 @@ def smart_news(driver):
 #        'CTR':19,
     }
     LOGIN_URL = "https://partners.smartnews-ads.com/login"
-    GOAL_URL = f"https://partners.smartnews-ads.com/manager/account/campaigns/{CAMPAIGN_ID}"
+    GOAL_URL  = "https://partners.smartnews-ads.com/manager/account/campaigns/"
     ID_ELM_NAME = "loginId"
     PW_ELM_NAME = "password"
     LOGIN_BUTTON_ELM_NAME = "btn-login"
@@ -69,43 +69,47 @@ def smart_news(driver):
     driver.find_element_by_name(ID_ELM_NAME).send_keys(id)
     driver.find_element_by_name(PW_ELM_NAME).send_keys(password)
 
-    # ログイン 
+    # ログイン
     driver.find_element_by_class_name(LOGIN_BUTTON_ELM_NAME).click()
 
-    # 目的ページに遷移
-    driver.get(GOAL_URL)
-
-    driver.find_element_by_id('insights-datepicker').click()
-
-    driver.find_element_by_xpath("//li[@data-range-key='今日']").click()
-
-    time.sleep(1)
-
-    html = driver.page_source.encode('utf-8')
-    soup = BeautifulSoup(html, "html.parser")
-    rows = soup.select('.fixedDataTableLayout_rowsContainer .fixedDataTableRowLayout_rowWrapper')
-
+    # キャンペーンごとに回す
     report_array = []
-    for i, row in enumerate(rows):
-        if i == 0:
-            continue
-        span = row.select('.public_fixedDataTableCell_cellContent span')
-        if span[COLUMNS['SPENDING']].get_text() == "-":
-            continue
+    for campaign_id in CAMPAIGN_IDS:
 
-        columns_dict = {}
-        for k, v in COLUMNS.items():
-            columns_dict[k] = span[v].get_text()
+        # 目的のページへ遷移
+        driver.get(GOAL_URL + str(campaign_id))
 
-        report_array.append(columns_dict)
+        driver.find_element_by_id('insights-datepicker').click()
 
+        driver.find_element_by_xpath("//li[@data-range-key='今日']").click()
+
+        time.sleep(1)
+
+        html = driver.page_source.encode('utf-8')
+        soup = BeautifulSoup(html, "html.parser")
+        rows = soup.select('.fixedDataTableLayout_rowsContainer .fixedDataTableRowLayout_rowWrapper')
+
+        for i, row in enumerate(rows):
+            if i == 0:
+                continue
+            span = row.select('.public_fixedDataTableCell_cellContent span')
+            if span[COLUMNS['SPENDING']].get_text() == "-":
+                continue
+
+            columns_dict = {}
+            for k, v in COLUMNS.items():
+                columns_dict[k] = span[v].get_text()
+
+            report_array.append(columns_dict)
+
+    # 合計spending計算
     total_spending = 0
     for report in report_array:
         total_spending += convert_str_to_int_money(report['SPENDING'])
 
     report_array.append({'合計消費' : "{:,}".format(total_spending)+"円"})
 
-    return json.dumps(report_array, indent=2, ensure_ascii=False) 
+    return json.dumps(report_array, indent=2, ensure_ascii=False)
 
 def squad(driver):
     MEDIA = "squad"
@@ -164,7 +168,7 @@ def squad(driver):
 
     report_array.append({'合計報酬' : "{:,}".format(total_reward)+"円"})
 
-    return json.dumps(report_array, indent=2, ensure_ascii=False) 
+    return json.dumps(report_array, indent=2, ensure_ascii=False)
 
 def post_slack(post_message):
     SLACK_WEBHOOK = "https://hooks.slack.com/services/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"
@@ -177,7 +181,7 @@ def post_slack(post_message):
     requests.post(SLACK_WEBHOOK, data=json.dumps(payload))
 
 def add_pre_format(message):
-    return "```{}```".format(message) 
+    return "```{}```".format(message)
 
 
 def convert_str_to_int_money(money_str):
