@@ -10,6 +10,10 @@ import logging
 
 logger = logging.getLogger()
 
+MEDIAS = {
+    'sn': 'スマートニュース',
+    'squad': 'SQUAD',
+}
 TODAY = 'today'
 YESTERDAY = 'yesterday'
 SELECT_DAYS = {
@@ -20,6 +24,8 @@ REPORT_HASH = {
     TODAY: [],
     YESTERDAY: [],
 }
+TOTAL_SPENDING = '合計消費'
+TOTAL_REWARD = '合計報酬'
 
 def lambda_handler(event, context):
     options = webdriver.ChromeOptions()
@@ -51,13 +57,24 @@ def lambda_handler(event, context):
     if int(dt_now.hour) == 8 and int(dt_now.minute) < 30:
       yesterday_flag = True
 
-    post_slack("*スマートニュース* " + add_pre_format(smart_news(driver, yesterday_flag)))
-    post_slack("*SQUADレポート* " + add_pre_format(squad(driver, yesterday_flag)))
+    # 各メディア毎に処理
+    for media, media_name in MEDIAS.items():
+        report = eval(media)(driver, yesterday_flag)
+        # 当日分をSLACK通知
+        post_slack("*"+media_name+"* " + add_pre_format(json.dumps(report[TODAY], indent=2, ensure_ascii=False)))
+        # 昨日分をspredsheetに送る
+        if yesterday_flag:
+            for yesterday_report in report[YESTERDAY]:
+                if TOTAL_SPENDING in yesterday_report:
+                    logger.warn(yesterday_report[TOTAL_SPENDING])
+                if TOTAL_REWARD in yesterday_report:
+                    logger.warn(yesterday_report[TOTAL_REWARD])
 
     driver.close()
     driver.quit()
 
-def smart_news(driver, yesterday_flag):
+# スマートニュース
+def sn(driver, yesterday_flag):
     MEDIA = "sn"
     CAMPAIGN_IDS = [19517007, 12993177]
     LOGIN_URL = "https://partners.smartnews-ads.com/login"
@@ -96,19 +113,20 @@ def smart_news(driver, yesterday_flag):
             # 目的のページへ遷移
             driver.get(GOAL_URL + str(campaign_id))
 
+            time.sleep(1)
+
             driver.find_element_by_id('insights-datepicker').click()
 
             report_hash[date].extend(parse_smartnews_report(driver, date))
 
         # 合計spending計算
         total_spending = 0
-        logger.warn(report_hash)
         for report in report_hash[date]:
             total_spending += convert_str_to_int_money(report['SPENDING'])
 
-        report_hash[date].append({'合計消費' : "{:,}".format(total_spending)+"円"})
+        report_hash[date].append({TOTAL_SPENDING : "{:,}".format(total_spending)+"円"})
 
-    return json.dumps(report_hash[TODAY], indent=2, ensure_ascii=False)
+    return report_hash
 
 def squad(driver, yesterday_flag):
     MEDIA = "squad"
@@ -152,9 +170,9 @@ def squad(driver, yesterday_flag):
         for report in report_hash[date]:
             total_reward += convert_str_to_int_money(report['REWARD'])
 
-        report_hash[date].append({'合計報酬' : "{:,}".format(total_reward)+"円"})
+        report_hash[date].append({TOTAL_REWARD : "{:,}".format(total_reward)+"円"})
 
-    return json.dumps(report_hash[TODAY], indent=2, ensure_ascii=False)
+    return report_hash
 
 def parse_smartnews_report(driver, target_day):
     COLUMNS = {
