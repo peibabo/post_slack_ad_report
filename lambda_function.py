@@ -6,6 +6,9 @@ import time
 import requests
 import datetime
 import copy
+import logging
+
+logger = logging.getLogger()
 
 TODAY = 'today'
 YESTERDAY = 'yesterday'
@@ -45,9 +48,8 @@ def lambda_handler(event, context):
     # AM8:00に回る場合は昨日レポートも取得
     dt_now = datetime.datetime.now()
     yesterday_flag = False
-    if dt_now.hour == 8 and dt_now.minute < 30
+    if int(dt_now.hour) == 8 and int(dt_now.minute) < 30:
       yesterday_flag = True
-
 
     post_slack("*スマートニュース* " + add_pre_format(smart_news(driver, yesterday_flag)))
     post_slack("*SQUADレポート* " + add_pre_format(squad(driver, yesterday_flag)))
@@ -58,18 +60,6 @@ def lambda_handler(event, context):
 def smart_news(driver, yesterday_flag):
     MEDIA = "sn"
     CAMPAIGN_IDS = [19517007, 12993177]
-    COLUMNS = {
-        'NAME':0,
-        'DAILY_BUDGET':7,
-        'SPENDING':9,
-        'VCTR':13,
-#        'CVR':14,
-        'CPA':15,
-        'CPC':16,
-#        'CPM':17,
-#        'IMP':18,
-#        'CTR':19,
-    }
     LOGIN_URL = "https://partners.smartnews-ads.com/login"
     GOAL_URL  = "https://partners.smartnews-ads.com/manager/account/campaigns/"
     ID_ELM_NAME = "loginId"
@@ -97,7 +87,7 @@ def smart_news(driver, yesterday_flag):
     for date in SELECT_DAYS:
 
         # 昨日レポートは指定時間しか取得しない
-        if date == YESTERDAY and yesterday_flag == False
+        if date == YESTERDAY and yesterday_flag == False:
           continue
 
         # キャンペーンごとに回してレポート取得
@@ -108,10 +98,11 @@ def smart_news(driver, yesterday_flag):
 
             driver.find_element_by_id('insights-datepicker').click()
 
-            report_hash[date].append(parse_smartnews_report(driver, date))
+            report_hash[date].extend(parse_smartnews_report(driver, date))
 
         # 合計spending計算
         total_spending = 0
+        logger.warn(report_hash)
         for report in report_hash[date]:
             total_spending += convert_str_to_int_money(report['SPENDING'])
 
@@ -121,12 +112,6 @@ def smart_news(driver, yesterday_flag):
 
 def squad(driver, yesterday_flag):
     MEDIA = "squad"
-    COLUMNS = {
-        'NAME':2,
-        'MEDIA':3,
-        'CV':4,
-        'REWARD':5,
-    }
     LOGIN_URL = "https://squad-affiliate.com/"
     GOAL_URL = "https://squad-affiliate.com/affiliaters/275/reports"
     ID_ELM_NAME = "affiliater[email]"
@@ -154,13 +139,13 @@ def squad(driver, yesterday_flag):
     for date in SELECT_DAYS:
 
         # 昨日レポートは指定時間しか取得しない
-        if date == YESTERDAY and yesterday_flag == False
+        if date == YESTERDAY and yesterday_flag == False:
           continue
 
         # 目的ページに遷移
         driver.get(GOAL_URL)
 
-        report_hash[date].append(parse_squad_report(driver, date))
+        report_hash[date].extend(parse_squad_report(driver, date))
 
         # 合計reward計算
         total_reward = 0
@@ -171,15 +156,20 @@ def squad(driver, yesterday_flag):
 
     return json.dumps(report_hash[TODAY], indent=2, ensure_ascii=False)
 
-    total_reward = 0
-    for report in report_array:
-        total_reward += convert_str_to_int_money(report['REWARD'])
-
-    report_array.append({'合計報酬' : "{:,}".format(total_reward)+"円"})
-
-    return json.dumps(report_array, indent=2, ensure_ascii=False)
-
 def parse_smartnews_report(driver, target_day):
+    COLUMNS = {
+        'NAME':0,
+        'DAILY_BUDGET':7,
+        'SPENDING':9,
+        'VCTR':13,
+#        'CVR':14,
+        'CPA':15,
+        'CPC':16,
+#        'CPM':17,
+#        'IMP':18,
+#        'CTR':19,
+    }
+
     driver.find_element_by_xpath("//li[@data-range-key='"+SELECT_DAYS[target_day]+"']").click()
 
     time.sleep(1)
@@ -205,6 +195,13 @@ def parse_smartnews_report(driver, target_day):
     return report_array
 
 def parse_squad_report(driver, target_day):
+    COLUMNS = {
+        'NAME':2,
+        'MEDIA':3,
+        'CV':4,
+        'REWARD':5,
+    }
+
     driver.find_element_by_xpath("//input[@data-disable-with='"+SELECT_DAYS[target_day]+"']").click()
 
     html = driver.page_source.encode('utf-8')
