@@ -39,7 +39,7 @@ TOTAL_REWARD = '合計報酬'
 config = configparser.ConfigParser()
 config.read("./config.ini")
 
-yesterday = datetime.strftime(datetime.now() - timedelta(1), '%Y-%m-%d')
+yesterday = datetime.strftime(datetime.now() - timedelta(1), '%Y/%m/%d')
 
 def lambda_handler(event, context):
     options = webdriver.ChromeOptions()
@@ -274,13 +274,20 @@ def post_spreadsheet(report, media):
     gc = gspread.authorize(credentials)
     wb = gc.open_by_key(spread_id)
     sheet = wb.worksheet("rowdata")
+    value_input_option = 'USER_ENTERED'
 
     if TOTAL_SPENDING in report:
-        sheet.append_row([yesterday, media, 'spending', convert_str_to_int_money(report[TOTAL_SPENDING])])
+        sheet.append_row(
+            [yesterday, media, 'spending', convert_str_to_int_money(report[TOTAL_SPENDING])],
+            value_input_option
+        )
     if TOTAL_REWARD in report:
         for key in MEDIAS:
             if key != SQUAD_VERIFY:
-                sheet.append_row([yesterday, key, 'reward', convert_str_to_int_money(report[MEDIAS_SQUAD_CONVERT[key]+TOTAL_REWARD])])
+                sheet.append_row(
+                    [yesterday, key, 'reward', convert_str_to_int_money(report[MEDIAS_SQUAD_CONVERT[key]+TOTAL_REWARD])],
+                    value_input_option
+                )
 
 
 def add_pre_format(message):
