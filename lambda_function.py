@@ -65,10 +65,10 @@ def lambda_handler(event, context):
         "./bin/chromedriver",
         chrome_options=options)
 
-    # AM8:00に回る場合は昨日レポートも取得
+    # AM7:00に回る場合は昨日レポートも取得
     dt_now = datetime.now()
     yesterday_flag = False
-    if int(dt_now.hour) == 8 and int(dt_now.minute) < 30:
+    if int(dt_now.hour) == 7 and int(dt_now.minute) < 30:
       yesterday_flag = True
 
     # 各メディア毎に処理
@@ -275,17 +275,31 @@ def post_spreadsheet(report, media):
     wb = gc.open_by_key(spread_id)
     sheet = wb.worksheet("rowdata")
     value_input_option = 'USER_ENTERED'
+    spending = 'spending'
+    reward = 'reward'
 
     if TOTAL_SPENDING in report:
         sheet.append_row(
-            [yesterday, media, 'spending', convert_str_to_int_money(report[TOTAL_SPENDING])],
+            [
+                yesterday,
+                media,
+                spending,
+                '{}_{}_{}'.format(yesterday, media, spending),
+                convert_str_to_int_money(report[TOTAL_SPENDING]),
+            ],
             value_input_option
         )
     if TOTAL_REWARD in report:
         for key in MEDIAS:
             if key != SQUAD_VERIFY:
                 sheet.append_row(
-                    [yesterday, key, 'reward', convert_str_to_int_money(report[MEDIAS_SQUAD_CONVERT[key]+TOTAL_REWARD])],
+                    [
+                        yesterday,
+                        key,
+                        reward,
+                        '{}_{}_{}'.format(yesterday, key, reward),
+                        convert_str_to_int_money(report[MEDIAS_SQUAD_CONVERT[key]+TOTAL_REWARD]),
+                    ],
                     value_input_option
                 )
 
