@@ -4,15 +4,24 @@ import configparser
 import json
 import time
 import requests
-import datetime
 import copy
 import logging
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime, timedelta
 
 logger = logging.getLogger()
 
+SMART_NEWS_VERIFY = 'sn'
+SQUAD_VERIFY = 'squad'
+
 MEDIAS = {
-    'sn': 'スマートニュース',
-    'squad': 'SQUAD',
+    SMART_NEWS_VERIFY: 'スマートニュース',
+    SQUAD_VERIFY: 'SQUADレポート',
+}
+MEDIAS_SQUAD_CONVERT = {
+    SMART_NEWS_VERIFY: 'SmartNews',
+    SQUAD_VERIFY: '',
 }
 TODAY = 'today'
 YESTERDAY = 'yesterday'
@@ -52,7 +61,7 @@ def lambda_handler(event, context):
         chrome_options=options)
 
     # AM8:00に回る場合は昨日レポートも取得
-    dt_now = datetime.datetime.now()
+    dt_now = datetime.now()
     yesterday_flag = False
     if int(dt_now.hour) == 8 and int(dt_now.minute) < 30:
       yesterday_flag = True
@@ -60,15 +69,14 @@ def lambda_handler(event, context):
     # 各メディア毎に処理
     for media, media_name in MEDIAS.items():
         report = eval(media)(driver, yesterday_flag)
+
         # 当日分をSLACK通知
         post_slack("*"+media_name+"* " + add_pre_format(json.dumps(report[TODAY], indent=2, ensure_ascii=False)))
+
         # 昨日分をspredsheetに送る
         if yesterday_flag:
             for yesterday_report in report[YESTERDAY]:
-                if TOTAL_SPENDING in yesterday_report:
-                    logger.warn(yesterday_report[TOTAL_SPENDING])
-                if TOTAL_REWARD in yesterday_report:
-                    logger.warn(yesterday_report[TOTAL_REWARD])
+                post_spreadsheet(yesterday_report, media)
 
     driver.close()
     driver.quit()
@@ -125,7 +133,6 @@ def sn(driver, yesterday_flag):
             total_spending += convert_str_to_int_money(report['SPENDING'])
 
         report_hash[date].append({TOTAL_SPENDING : "{:,}".format(total_spending)+"円"})
-
     return report_hash
 
 def squad(driver, yesterday_flag):
@@ -166,11 +173,17 @@ def squad(driver, yesterday_flag):
         report_hash[date].extend(parse_squad_report(driver, date))
 
         # 合計reward計算
-        total_reward = 0
+        total_reward = {}
+        total_reward[TOTAL_REWARD] = 0
         for report in report_hash[date]:
-            total_reward += convert_str_to_int_money(report['REWARD'])
+            total_reward[report['MEDIA']+TOTAL_REWARD]  = total_reward.get(report['MEDIA']+TOTAL_REWARD, 0)
+            total_reward[report['MEDIA']+TOTAL_REWARD] += convert_str_to_int_money(report['REWARD'])
+            total_reward[TOTAL_REWARD] += convert_str_to_int_money(report['REWARD'])
 
-        report_hash[date].append({TOTAL_REWARD : "{:,}".format(total_reward)+"円"})
+        for key, value in total_reward.items():
+            total_reward[key] = "{:,}".format(value)+"円"
+
+        report_hash[date].append(total_reward)
 
     return report_hash
 
@@ -250,6 +263,25 @@ def post_slack(post_message):
     }
 
     requests.post(SLACK_WEBHOOK, data=json.dumps(payload))
+
+def post_spreadsheet(report, media):
+    scope = ['https://spreadsheets.google.com/feeds',
+             'https://www.googleapis.com/auth/drive']
+
+    doc_id = '1CARfB_uppUBHeZNY7MxPd-LV3APeLF9GHu-ftPrbYqQ'
+    credentials = ServiceAccountCredentials.from_json_keyfile_name('addailyreport-254511-3504e1145325.json', scope)
+    gc = gspread.authorize(credentials)
+    wb = gc.open_by_key(doc_id)
+    sheet = wb.worksheet("rowdata")
+    yesterday = datetime.strftime(datetime.now() - timedelta(1), '%Y-%m-%d')
+
+    if TOTAL_SPENDING in report:
+        sheet.append_row([yesterday, media, 'spending', convert_str_to_int_money(report[TOTAL_SPENDING])])
+    if TOTAL_REWARD in report:
+        for key in MEDIAS:
+            if key != SQUAD_VERIFY:
+                sheet.append_row([yesterday, key, 'reward', convert_str_to_int_money(report[MEDIAS_SQUAD_CONVERT[key]+TOTAL_REWARD])])
+
 
 def add_pre_format(message):
     return "```{}```".format(message)
