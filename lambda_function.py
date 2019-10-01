@@ -36,6 +36,11 @@ REPORT_HASH = {
 TOTAL_SPENDING = '合計消費'
 TOTAL_REWARD = '合計報酬'
 
+config = configparser.ConfigParser()
+config.read("./config.ini")
+
+yesterday = datetime.strftime(datetime.now() - timedelta(1), '%Y-%m-%d')
+
 def lambda_handler(event, context):
     options = webdriver.ChromeOptions()
 
@@ -94,8 +99,6 @@ def sn(driver, yesterday_flag):
     driver.get(LOGIN_URL)
 
     # ID/PASSを取得
-    config = configparser.ConfigParser()
-    config.read("./config.ini")
     id = config.get("id", f"{MEDIA}_id")
     password = config.get("pw", f"{MEDIA}_pw")
 
@@ -146,8 +149,6 @@ def squad(driver, yesterday_flag):
     driver.get(LOGIN_URL)
 
     # ID/PASSを取得
-    config = configparser.ConfigParser()
-    config.read("./config.ini")
     id = config.get("id", f"{MEDIA}_id")
     password = config.get("pw", f"{MEDIA}_pw")
 
@@ -255,25 +256,24 @@ def parse_squad_report(driver, target_day):
     return report_array
 
 def post_slack(post_message):
-    SLACK_WEBHOOK = "https://hooks.slack.com/services/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"
+    webhook_url = config.get("slack", "webhook_url")
     payload = {
         "text": post_message,
         "username": "ADレポート",
         "icon_emoji": ':snake:',
     }
 
-    requests.post(SLACK_WEBHOOK, data=json.dumps(payload))
+    requests.post(webhook_url, data=json.dumps(payload))
 
 def post_spreadsheet(report, media):
     scope = ['https://spreadsheets.google.com/feeds',
              'https://www.googleapis.com/auth/drive']
 
-    doc_id = '1CARfB_uppUBHeZNY7MxPd-LV3APeLF9GHu-ftPrbYqQ'
+    spread_id = config.get("google", "spread_id")
     credentials = ServiceAccountCredentials.from_json_keyfile_name('addailyreport-254511-3504e1145325.json', scope)
     gc = gspread.authorize(credentials)
-    wb = gc.open_by_key(doc_id)
+    wb = gc.open_by_key(spread_id)
     sheet = wb.worksheet("rowdata")
-    yesterday = datetime.strftime(datetime.now() - timedelta(1), '%Y-%m-%d')
 
     if TOTAL_SPENDING in report:
         sheet.append_row([yesterday, media, 'spending', convert_str_to_int_money(report[TOTAL_SPENDING])])
