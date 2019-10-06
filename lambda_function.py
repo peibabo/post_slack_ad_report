@@ -215,6 +215,9 @@ def parse_smartnews_report(driver, target_day):
         if i == 0:
             continue
         span = row.select('.public_fixedDataTableCell_cellContent span')
+        my_name = config.get("company", "my")
+        if my_name not in span[COLUMNS['NAME']].get_text():
+            continue
         if span[COLUMNS['SPENDING']].get_text() == "-":
             continue
 
