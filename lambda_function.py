@@ -7,10 +7,16 @@ import requests
 import copy
 import logging
 import gspread
+import boto3
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 
 logger = logging.getLogger()
+
+config = configparser.ConfigParser()
+config.read("./config.ini")
+
+BUCKET_NAME = config.get("company", "bucket_name")
 
 SMART_NEWS_VERIFY = 'sn'
 SQUAD_VERIFY = 'squad'
@@ -35,9 +41,6 @@ REPORT_HASH = {
 }
 TOTAL_SPENDING = '合計消費'
 TOTAL_REWARD = '合計報酬'
-
-config = configparser.ConfigParser()
-config.read("./config.ini")
 
 yesterday = datetime.strftime(datetime.now() - timedelta(1), '%Y/%m/%d')
 
@@ -89,7 +92,6 @@ def lambda_handler(event, context):
 # スマートニュース
 def sn(driver, yesterday_flag):
     MEDIA = "sn"
-    CAMPAIGN_IDS = [19517007, 12993177]
     LOGIN_URL = "https://partners.smartnews-ads.com/login"
     GOAL_URL  = "https://partners.smartnews-ads.com/manager/account/campaigns/"
     ID_ELM_NAME = "loginId"
@@ -109,6 +111,13 @@ def sn(driver, yesterday_flag):
     # ログイン
     driver.find_element_by_class_name(LOGIN_BUTTON_ELM_NAME).click()
 
+    # s3に置いてる稼働中キャンペーンIDを取得する
+    s3 = boto3.client('s3')
+    file_name = f'active_campaigns/{MEDIA}.csv'
+    response = s3.get_object(Bucket=BUCKET_NAME, Key=file_name)
+    body = response['Body'].read().decode('utf-8')
+    campaign_ids = body.split(',')
+
     report_hash = copy.deepcopy(REPORT_HASH)
 
     # 日付毎に回す
@@ -119,7 +128,7 @@ def sn(driver, yesterday_flag):
           continue
 
         # キャンペーンごとに回してレポート取得
-        for campaign_id in CAMPAIGN_IDS:
+        for campaign_id in campaign_ids:
 
             # 目的のページへ遷移
             driver.get(GOAL_URL + str(campaign_id))
