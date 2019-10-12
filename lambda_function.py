@@ -118,33 +118,9 @@ def sn(driver, yesterday_flag):
     body = response['Body'].read().decode('utf-8')
     campaign_ids = body.split(',')
 
-    report_hash = copy.deepcopy(REPORT_HASH)
+    # レポートデータ取得
+    report_hash = eval(f'{MEDIA}_get_spending_data')
 
-    # 日付毎に回す
-    for date in SELECT_DAYS:
-
-        # 昨日レポートは指定時間しか取得しない
-        if date == YESTERDAY and yesterday_flag == False:
-          continue
-
-        # キャンペーンごとに回してレポート取得
-        for campaign_id in campaign_ids:
-
-            # 目的のページへ遷移
-            driver.get(GOAL_URL + str(campaign_id))
-
-            time.sleep(1)
-
-            driver.find_element_by_id('insights-datepicker').click()
-
-            report_hash[date].extend(parse_smartnews_report(driver, date))
-
-        # 合計spending計算
-        total_spending = 0
-        for report in report_hash[date]:
-            total_spending += convert_str_to_int_money(report['SPENDING'])
-
-        report_hash[date].append({TOTAL_SPENDING : "{:,}".format(total_spending)+"円"})
     return report_hash
 
 def squad(driver, yesterday_flag):
@@ -168,6 +144,12 @@ def squad(driver, yesterday_flag):
     # ログイン
     driver.find_element_by_name(LOGIN_BUTTON_ELM_NAME).click()
 
+    # レポートデータ取得
+    report_hash = eval(f'{MEDIA}_get_reward_data')
+
+    return report_hash
+
+def sn_get_spending_data
     report_hash = copy.deepcopy(REPORT_HASH)
 
     # 日付毎に回す
@@ -177,27 +159,29 @@ def squad(driver, yesterday_flag):
         if date == YESTERDAY and yesterday_flag == False:
           continue
 
-        # 目的ページに遷移
-        driver.get(GOAL_URL)
+        # キャンペーンごとに回してレポート取得
+        for campaign_id in campaign_ids:
 
-        report_hash[date].extend(parse_squad_report(driver, date))
+            # 目的のページへ遷移
+            driver.get(GOAL_URL + str(campaign_id))
 
-        # 合計reward計算
-        total_reward = {}
-        total_reward[TOTAL_REWARD] = 0
+            time.sleep(1)
+
+            driver.find_element_by_id('insights-datepicker').click()
+
+            # レポートページをパース
+            report_hash[date].extend(eval(f'{MEDIA}_parse_report')(driver, date))
+
+        # 合計spending計算
+        total_spending = 0
         for report in report_hash[date]:
-            total_reward[report['MEDIA']+TOTAL_REWARD]  = total_reward.get(report['MEDIA']+TOTAL_REWARD, 0)
-            total_reward[report['MEDIA']+TOTAL_REWARD] += convert_str_to_int_money(report['REWARD'])
-            total_reward[TOTAL_REWARD] += convert_str_to_int_money(report['REWARD'])
+            total_spending += convert_str_to_int_money(report['SPENDING'])
 
-        for key, value in total_reward.items():
-            total_reward[key] = "{:,}".format(value)+"円"
-
-        report_hash[date].append(total_reward)
+        report_hash[date].append({TOTAL_SPENDING : "{:,}".format(total_spending)+"円"})
 
     return report_hash
 
-def parse_smartnews_report(driver, target_day):
+def sn_parse_report(driver, target_day):
     COLUMNS = {
         'NAME':0,
         'DAILY_BUDGET':7,
@@ -238,7 +222,38 @@ def parse_smartnews_report(driver, target_day):
 
     return report_array
 
-def parse_squad_report(driver, target_day):
+def squad_get_reward_data
+    report_hash = copy.deepcopy(REPORT_HASH)
+
+    # 日付毎に回す
+    for date in SELECT_DAYS:
+
+        # 昨日レポートは指定時間しか取得しない
+        if date == YESTERDAY and yesterday_flag == False:
+          continue
+
+        # 目的ページに遷移
+        driver.get(GOAL_URL)
+
+        # レポートページをパース
+        report_hash[date].extend(eval(f'{MEDIA}_parse_report')(driver, date))
+
+        # 合計reward計算
+        total_reward = {}
+        total_reward[TOTAL_REWARD] = 0
+        for report in report_hash[date]:
+            total_reward[report['MEDIA']+TOTAL_REWARD]  = total_reward.get(report['MEDIA']+TOTAL_REWARD, 0)
+            total_reward[report['MEDIA']+TOTAL_REWARD] += convert_str_to_int_money(report['REWARD'])
+            total_reward[TOTAL_REWARD] += convert_str_to_int_money(report['REWARD'])
+
+        for key, value in total_reward.items():
+            total_reward[key] = "{:,}".format(value)+"円"
+
+        report_hash[date].append(total_reward)
+
+    return report_hash
+
+def squad_parse_report(driver, target_day):
     COLUMNS = {
         'NAME':2,
         'MEDIA':3,
