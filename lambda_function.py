@@ -44,6 +44,12 @@ TOTAL_REWARD = '合計報酬'
 
 yesterday = datetime.strftime(datetime.now() - timedelta(1), '%Y/%m/%d')
 
+# AM7:00に回る場合は昨日レポートも取得
+yesterday_flag = False
+dt_now = datetime.now()
+if int(dt_now.hour) == 7 and int(dt_now.minute) < 30:
+  yesterday_flag = True
+
 def lambda_handler(event, context):
     options = webdriver.ChromeOptions()
 
@@ -68,15 +74,9 @@ def lambda_handler(event, context):
         "./bin/chromedriver",
         chrome_options=options)
 
-    # AM7:00に回る場合は昨日レポートも取得
-    dt_now = datetime.now()
-    yesterday_flag = False
-    if int(dt_now.hour) == 7 and int(dt_now.minute) < 30:
-      yesterday_flag = True
-
     # 各メディア毎に処理
     for media, media_name in MEDIAS.items():
-        report = eval(media)(driver, yesterday_flag)
+        report = eval(media)(driver)
 
         # 当日分をSLACK通知
         post_slack("*"+media_name+"* " + add_pre_format(json.dumps(report[TODAY], indent=2, ensure_ascii=False)))
@@ -90,10 +90,9 @@ def lambda_handler(event, context):
     driver.quit()
 
 # スマートニュース
-def sn(driver, yesterday_flag):
+def sn(driver):
     MEDIA = "sn"
     LOGIN_URL = "https://partners.smartnews-ads.com/login"
-    GOAL_URL  = "https://partners.smartnews-ads.com/manager/account/campaigns/"
     ID_ELM_NAME = "loginId"
     PW_ELM_NAME = "password"
     LOGIN_BUTTON_ELM_NAME = "btn-login"
@@ -119,14 +118,15 @@ def sn(driver, yesterday_flag):
     campaign_ids = body.split(',')
 
     # レポートデータ取得
-    report_hash = eval(f'{MEDIA}_get_spending_data')
+    report_hash = eval(f'{MEDIA}_get_spending_data')(driver, campaign_ids, MEDIA)
+
+    # クリエイティブ審査状況取得
 
     return report_hash
 
-def squad(driver, yesterday_flag):
+def squad(driver):
     MEDIA = "squad"
     LOGIN_URL = "https://squad-affiliate.com/"
-    GOAL_URL = "https://squad-affiliate.com/affiliaters/275/reports"
     ID_ELM_NAME = "affiliater[email]"
     PW_ELM_NAME = "affiliater[password]"
     LOGIN_BUTTON_ELM_NAME = "commit"
@@ -145,11 +145,12 @@ def squad(driver, yesterday_flag):
     driver.find_element_by_name(LOGIN_BUTTON_ELM_NAME).click()
 
     # レポートデータ取得
-    report_hash = eval(f'{MEDIA}_get_reward_data')
+    report_hash = eval(f'{MEDIA}_get_reward_data')(driver, MEDIA)
 
     return report_hash
 
-def sn_get_spending_data
+def sn_get_spending_data(driver, campaign_ids, media):
+    GOAL_URL  = "https://partners.smartnews-ads.com/manager/account/campaigns/"
     report_hash = copy.deepcopy(REPORT_HASH)
 
     # 日付毎に回す
@@ -170,7 +171,7 @@ def sn_get_spending_data
             driver.find_element_by_id('insights-datepicker').click()
 
             # レポートページをパース
-            report_hash[date].extend(eval(f'{MEDIA}_parse_report')(driver, date))
+            report_hash[date].extend(eval(f'{media}_parse_report')(driver, date))
 
         # 合計spending計算
         total_spending = 0
@@ -222,7 +223,8 @@ def sn_parse_report(driver, target_day):
 
     return report_array
 
-def squad_get_reward_data
+def squad_get_reward_data(driver, media):
+    GOAL_URL = "https://squad-affiliate.com/affiliaters/275/reports"
     report_hash = copy.deepcopy(REPORT_HASH)
 
     # 日付毎に回す
@@ -236,7 +238,7 @@ def squad_get_reward_data
         driver.get(GOAL_URL)
 
         # レポートページをパース
-        report_hash[date].extend(eval(f'{MEDIA}_parse_report')(driver, date))
+        report_hash[date].extend(eval(f'{media}_parse_report')(driver, date))
 
         # 合計reward計算
         total_reward = {}
