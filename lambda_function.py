@@ -120,7 +120,8 @@ def sn(driver):
     # レポートデータ取得
     report_hash = eval(f'{MEDIA}_get_spending_data')(driver, campaign_ids, MEDIA)
 
-    # クリエイティブ審査状況取得
+    # 審査中ステータス取得
+    report_hash[TODAY].extend(eval(f'{MEDIA}_get_ad_status')(driver, campaign_ids, MEDIA))
 
     return report_hash
 
@@ -150,7 +151,7 @@ def squad(driver):
     return report_hash
 
 def sn_get_spending_data(driver, campaign_ids, media):
-    GOAL_URL  = "https://partners.smartnews-ads.com/manager/account/campaigns/"
+    GOAL_URL  = "https://partners.smartnews-ads.com/manager/account/campaigns/%s"
     report_hash = copy.deepcopy(REPORT_HASH)
 
     # 日付毎に回す
@@ -164,14 +165,17 @@ def sn_get_spending_data(driver, campaign_ids, media):
         for campaign_id in campaign_ids:
 
             # 目的のページへ遷移
-            driver.get(GOAL_URL + str(campaign_id))
+            driver.get(GOAL_URL % str(campaign_id))
 
             time.sleep(1)
 
             driver.find_element_by_id('insights-datepicker').click()
+            driver.find_element_by_xpath("//li[@data-range-key='"+SELECT_DAYS[date]+"']").click()
+
+            time.sleep(1)
 
             # レポートページをパース
-            report_hash[date].extend(eval(f'{media}_parse_report')(driver, date))
+            report_hash[date].extend(eval(f'{media}_parse_report')(driver))
 
         # 合計spending計算
         total_spending = 0
@@ -182,7 +186,7 @@ def sn_get_spending_data(driver, campaign_ids, media):
 
     return report_hash
 
-def sn_parse_report(driver, target_day):
+def sn_parse_report(driver):
     COLUMNS = {
         'NAME':0,
         'DAILY_BUDGET':7,
@@ -195,10 +199,6 @@ def sn_parse_report(driver, target_day):
 #        'IMP':18,
 #        'CTR':19,
     }
-
-    driver.find_element_by_xpath("//li[@data-range-key='"+SELECT_DAYS[target_day]+"']").click()
-
-    time.sleep(1)
 
     html = driver.page_source.encode('utf-8')
     soup = BeautifulSoup(html, "html.parser")
@@ -223,6 +223,45 @@ def sn_parse_report(driver, target_day):
 
     return report_array
 
+def sn_get_ad_status(driver, campaign_ids, media):
+    GOAL_URL  = "https://partners.smartnews-ads.com/advertiser/%s/campaign"
+    ad_status_array = []
+
+    # キャンペーンごとに回してレポート取得
+    for campaign_id in campaign_ids:
+
+        # 目的のページへ遷移
+        driver.get(GOAL_URL % str(campaign_id))
+
+        time.sleep(1)
+
+        # レポートページをパース
+        ad_status_array.append(eval(f'{media}_parse_status')(driver))
+
+    return ad_status_array
+
+def sn_parse_status(driver):
+    html = driver.page_source.encode('utf-8')
+    soup = BeautifulSoup(html, "html.parser")
+    rows = soup.select('.editable-over.ng-scope')
+
+    status_dict = {}
+    for i, row in enumerate(rows):
+        td = row.find('td', sortable="'name'")
+        a = td.find('a')
+        campaign_name = a.get_text()
+        my_name = config.get("company", "my")
+        if my_name not in campaign_name:
+            continue
+
+        warning = row.select_one('.badge .badge-warning')
+        reviewing = 0
+        if warning:
+            reviewing = warning.select_one('.ng-binding').get_text()
+
+        status_dict[campaign_name] = "審査中：" + str(reviewing)
+    return status_dict
+
 def squad_get_reward_data(driver, media):
     GOAL_URL = "https://squad-affiliate.com/affiliaters/275/reports"
     report_hash = copy.deepcopy(REPORT_HASH)
@@ -236,9 +275,12 @@ def squad_get_reward_data(driver, media):
 
         # 目的ページに遷移
         driver.get(GOAL_URL)
+        driver.find_element_by_xpath("//input[@data-disable-with='"+SELECT_DAYS[date]+"']").click()
+
+        time.sleep(1)
 
         # レポートページをパース
-        report_hash[date].extend(eval(f'{media}_parse_report')(driver, date))
+        report_hash[date].extend(eval(f'{media}_parse_report')(driver))
 
         # 合計reward計算
         total_reward = {}
@@ -255,15 +297,13 @@ def squad_get_reward_data(driver, media):
 
     return report_hash
 
-def squad_parse_report(driver, target_day):
+def squad_parse_report(driver):
     COLUMNS = {
         'NAME':2,
         'MEDIA':3,
         'CV':4,
         'REWARD':5,
     }
-
-    driver.find_element_by_xpath("//input[@data-disable-with='"+SELECT_DAYS[target_day]+"']").click()
 
     html = driver.page_source.encode('utf-8')
     soup = BeautifulSoup(html, "html.parser")
