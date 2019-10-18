@@ -254,7 +254,7 @@ def sn_parse_status(driver):
         if my_name not in campaign_name:
             continue
 
-        warning = row.select_one('.badge .badge-warning')
+        warning = row.select_one('.badge.badge-warning')
         reviewing = 0
         if warning:
             reviewing = warning.select_one('.ng-binding').get_text()
