@@ -190,14 +190,14 @@ def sn_parse_report(driver):
     COLUMNS = {
         'NAME':0,
         'DAILY_BUDGET':7,
-        'SPENDING':9,
-        'VCTR':13,
-#        'CVR':14,
-        'CPA':15,
-        'CPC':16,
-#        'CPM':17,
-#        'IMP':18,
-#        'CTR':19,
+        'SPENDING':11,
+        'VCTR':15,
+#        'CVR':16,
+        'CPA':17,
+        'CPC':18,
+#        'CPM':19,
+#        'IMP':20,
+#        'CTR':21,
     }
 
     html = driver.page_source.encode('utf-8')
